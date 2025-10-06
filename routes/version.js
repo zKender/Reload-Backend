@@ -8,17 +8,17 @@ app.get("/fortnite/api/version", (req, res) => {
       "app": "fortnite",
       "serverDate": new Date().toISOString(),
       "overridePropertiesVersion": "unknown",
-      "cln": "17951730",
-      "build": "444",
+      "cln": "15222482",
+      "build": "343",
       "moduleName": "Fortnite-Core",
-      "buildDate": "2021-10-27T21:00:51.697Z",
-      "version": "18.30",
-      "branch": "Release-18.30",
+      "buildDate": "2021-02-02T21:00:51.697Z",
+      "version": "15.30",
+      "branch": "Release-15.30",
       "modules": {
         "Epic-LightSwitch-AccessControlCore": {
-          "cln": "17237679",
-          "build": "b2130",
-          "buildDate": "2021-08-19T18:56:08.144Z",
+          "cln": "15200000",
+          "build": "b1800",
+          "buildDate": "2021-02-01T18:56:08.144Z",
           "version": "1.0.0",
           "branch": "trunk"
         },
@@ -30,9 +30,9 @@ app.get("/fortnite/api/version", (req, res) => {
           "branch": "master"
         },
         "epic-common-core": {
-          "cln": "17909521",
-          "build": "3217",
-          "buildDate": "2021-10-25T18:41:12.486Z",
+          "cln": "15190000",
+          "build": "3000",
+          "buildDate": "2021-01-28T18:41:12.486Z",
           "version": "3.0",
           "branch": "TRUNK"
         }

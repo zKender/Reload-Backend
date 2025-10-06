@@ -13,7 +13,7 @@ const User = require("../model/user.js");
 const Friends = require("../model/friends.js");
 const matchmaker = require("../matchmaker/matchmaker.js")
 
-const port = config.bEnableHTTPS ? 443 : 80;
+const port = config.bEnableHTTPS ? 443 : (config.port || 80);
 let wss;
 
 let httpsOptions;
