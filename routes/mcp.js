@@ -1537,6 +1537,7 @@ app.post("/fortnite/api/game/v2/profile/*/client/UpdateQuestClientObjectives", v
                         })
 
                         // Challenges: increment bundle progress and award Season XP for 15.30
+                        let awardedSeasonXp = false;
                         try {
                             if (SeasonQuestIDS_Update && SeasonQuestIDS_Update.Quests) {
                                 const QuestID = QuestsToUpdate[i];
@@ -1591,17 +1592,85 @@ app.post("/fortnite/api/game/v2/profile/*/client/UpdateQuestClientObjectives", v
                                                         psIndex = athena.stats.attributes.past_seasons.length - 1;
                                                     }
                                                     athena.stats.attributes.past_seasons[psIndex].seasonXp += qty;
+                                                    athena.stats.attributes.xp = (athena.stats.attributes.xp || 0) + qty;
                                                     ApplyProfileChanges.push({
                                                         "changeType": "statModified",
                                                         "name": "past_seasons",
                                                         "value": athena.stats.attributes.past_seasons
                                                     });
+                                                    ApplyProfileChanges.push({
+                                                        "changeType": "statModified",
+                                                        "name": "xp",
+                                                        "value": athena.stats.attributes.xp
+                                                    });
+                                                    awardedSeasonXp = true;
                                                 }
                                             }
                                         }
                                     }
                                 }
                             }
+                        } catch {}
+
+                        // Fallback XP for quests without explicit rewards (typical daily quests)
+                        if (!awardedSeasonXp) {
+                            const qty = 500;
+                            if (!athena.stats.attributes.past_seasons) athena.stats.attributes.past_seasons = [];
+                            const seasonNum = (global?.kv?.get?.("currentSeason") || null) || (require("../Config/config.json").bBattlePassSeason || memory.season);
+                            let psIndex = athena.stats.attributes.past_seasons.findIndex(s => s.seasonNumber === seasonNum);
+                            if (psIndex === -1) {
+                                athena.stats.attributes.past_seasons.push({
+                                    seasonNumber: seasonNum,
+                                    numWins: 0,
+                                    numHighBracket: 0,
+                                    numLowBracket: 0,
+                                    seasonXp: 0,
+                                    seasonLevel: 1,
+                                    bookXp: athena.stats.attributes.book_xp || 0,
+                                    bookLevel: athena.stats.attributes.book_level || 1,
+                                    purchasedVIP: athena.stats.attributes.book_purchased || false,
+                                    numRoyalRoyales: 0,
+                                    survivorTier: 0,
+                                    survivorPrestige: 0
+                                });
+                                psIndex = athena.stats.attributes.past_seasons.length - 1;
+                            }
+                            athena.stats.attributes.past_seasons[psIndex].seasonXp += qty;
+                            athena.stats.attributes.xp = (athena.stats.attributes.xp || 0) + qty;
+                            ApplyProfileChanges.push({
+                                "changeType": "statModified",
+                                "name": "past_seasons",
+                                "value": athena.stats.attributes.past_seasons
+                            });
+                            ApplyProfileChanges.push({
+                                "changeType": "statModified",
+                                "name": "xp",
+                                "value": athena.stats.attributes.xp
+                            });
+                        }
+
+                        // Always increment battlepass XP/level a bit on quest claim to reflect 15.30 behavior
+                        try {
+                            let bookXp = athena.stats.attributes.book_xp || 0;
+                            let bookLevel = athena.stats.attributes.book_level || 1;
+                            bookXp += 5;
+                            while (bookXp >= 10) {
+                                bookXp -= 10;
+                                bookLevel += 1;
+                                if (bookLevel > 100) { bookLevel = 100; break; }
+                            }
+                            athena.stats.attributes.book_xp = bookXp;
+                            athena.stats.attributes.book_level = bookLevel;
+                            ApplyProfileChanges.push({
+                                "changeType": "statModified",
+                                "name": "book_xp",
+                                "value": athena.stats.attributes.book_xp
+                            });
+                            ApplyProfileChanges.push({
+                                "changeType": "statModified",
+                                "name": "book_level",
+                                "value": athena.stats.attributes.book_level
+                            });
                         } catch {}
                     }
                 }
