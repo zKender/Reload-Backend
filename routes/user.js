@@ -86,6 +86,29 @@ app.get("/persona/api/public/account/lookup", async (req, res) => {
     });
 });
 
+// Alias for clients (15.x) that call the account service instead of persona
+app.get("/account/api/public/account/lookup", async (req, res) => {
+    log.debug("GET /account/api/public/account/lookup called");
+    if (typeof req.query.q != "string" || !req.query.q) return error.createError(
+        "errors.com.epicgames.bad_request",
+        "Required String parameter 'q' is invalid or not present", 
+        undefined, 1001, undefined, 400, res
+    );
+
+    let user = await User.findOne({ username_lower: req.query.q.toLowerCase(), banned: false }).lean();
+    if (!user) return error.createError(
+        "errors.com.epicgames.account.account_not_found",
+        `Sorry, we couldn't find an account for ${req.query.q}`, 
+        [req.query.q], 18007, undefined, 404, res
+    );
+    
+    res.json({
+        id: user.accountId,
+        displayName: user.username,
+        externalAuths: {}
+    });
+});
+
 app.get("/api/v1/search/:accountId", async (req, res) => {
     log.debug(`GET /api/v1/search/${req.params.accountId} called`);
     let response = [];
