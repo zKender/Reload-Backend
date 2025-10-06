@@ -8,12 +8,12 @@ app.get("/fortnite/api/version", (req, res) => {
       "app": "fortnite",
       "serverDate": new Date().toISOString(),
       "overridePropertiesVersion": "unknown",
-      "cln": "17951730",
-      "build": "444",
+      "cln": "15407543",
+      "build": "369",
       "moduleName": "Fortnite-Core",
-      "buildDate": "2021-10-27T21:00:51.697Z",
-      "version": "18.30",
-      "branch": "Release-18.30",
+      "buildDate": "2021-02-02T21:00:51.697Z",
+      "version": "15.30",
+      "branch": "Release-15.30",
       "modules": {
         "Epic-LightSwitch-AccessControlCore": {
           "cln": "17237679",

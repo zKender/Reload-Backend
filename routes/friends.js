@@ -224,6 +224,39 @@ app.get("/friends/api/public/blocklist/*", verifyToken, async (req, res) => {
     });
 });
 
+// Minimal endpoints for parity with ChronosPublic (15.30 clients)
+app.get("/friends/api/public/friends/:accountId/:friendId", verifyToken, async (req, res) => {
+    const friends = await Friends.findOne({ accountId: req.params.accountId }).lean();
+    if (!friends) return res.status(404).json({ error: "Friend list not found." });
+    const all = [...friends.list.accepted, ...friends.list.incoming, ...friends.list.outgoing];
+    const found = all.find(i => i.accountId == req.params.friendId);
+    if (!found) return res.status(404).json({ error: "Friend not found." });
+    res.json({
+        accountId: found.accountId,
+        status: friends.list.accepted.some(i => i.accountId == found.accountId) ? "ACCEPTED" : "PENDING",
+        direction: friends.list.incoming.some(i => i.accountId == found.accountId) ? "INBOUND" : "OUTBOUND",
+        created: found.created,
+        favorite: false
+    });
+});
+
+app.get("/friends/api/v1/:accountId/friends/:friendId", verifyToken, async (req, res) => {
+    const friends = await Friends.findOne({ accountId: req.params.accountId }).lean();
+    if (!friends) return res.status(404).json({ error: "Friend list not found." });
+    const all = [...friends.list.accepted, ...friends.list.incoming, ...friends.list.outgoing];
+    const found = all.find(i => i.accountId == req.params.friendId);
+    if (!found) return res.status(404).json({ error: "Friend not found." });
+    res.json({
+        accountId: found.accountId,
+        groups: [],
+        mutual: 0,
+        alias: found.alias || "",
+        note: "",
+        favorite: false,
+        created: found.created
+    });
+});
+
 function getRawBody(req, res, next) {
     if (req.headers["content-length"]) {
         if (Number(req.headers["content-length"]) > 16) return res.status(403).json({ "error": "File size must be 16 bytes or less." });

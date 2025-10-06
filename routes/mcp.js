@@ -77,7 +77,7 @@ app.post("/fortnite/api/game/v2/profile/*/client/SetReceiveGiftsEnabled", verify
         log.debug(`SetReceiveGiftsEnabled: Profile updated in database`);
     }
 
-    if (QueryRevision != ProfileRevisionCheck) {
+    if (QueryRevision != ProfileRevisionCheck || Math.floor(memory.build) >= 15) {
         ApplyProfileChanges = [{
             "changeType": "fullProfileUpdate",
             "profile": profile
@@ -123,6 +123,12 @@ app.post("/fortnite/api/game/v2/profile/*/client/ClientQuestLogin", verifyToken,
     var SeasonQuestIDS;
 
     const SeasonPrefix = memory.season < 10 ? `0${memory.season}` : memory.season;
+    // Force-load Season15 quests when running on 15.x builds to ensure compatibility
+    if (Math.floor(memory.build) === 15) {
+        try {
+            SeasonQuestIDS = AthenaQuestIDS["Season15"];
+        } catch {}
+    }
 
     try {
         if (req.query.profileId == "profile0") {
@@ -332,7 +338,7 @@ app.post("/fortnite/api/game/v2/profile/*/client/ClientQuestLogin", verifyToken,
     }
 
     function ParseQuest(QuestID) {
-        var Quest = SeasonQuestIDS.Quests[QuestID];
+                var Quest = SeasonQuestIDS.Quests[QuestID];
         if (!Quest) {
             return;
         }
@@ -408,8 +414,8 @@ app.post("/fortnite/api/game/v2/profile/*/client/ClientQuestLogin", verifyToken,
         await profiles.updateOne({ $set: { [`profiles.${req.query.profileId}`]: profile } });
     }
 
-    // this doesn't work properly on version v12.20 and above but whatever
-    if (QueryRevision != BaseRevision) {
+    // Adjust fullProfileUpdate behavior for 12.20+ and 15.x
+    if (QueryRevision != BaseRevision || Math.floor(memory.build) >= 15) {
         ApplyProfileChanges = [{
             "changeType": "fullProfileUpdate",
             "profile": profile
@@ -578,8 +584,8 @@ app.post("/fortnite/api/game/v2/profile/*/client/FortRerollDailyQuest", verifyTo
         await profiles.updateOne({ $set: { [`profiles.${req.query.profileId}`]: profile } });
     }
 
-    // this doesn't work properly on version v12.20 and above but whatever
-    if (QueryRevision !== BaseRevision) {
+    // Adjust fullProfileUpdate behavior for 12.20+ and 15.x
+    if (QueryRevision !== BaseRevision || Math.floor(memory.build) >= 15) {
         ApplyProfileChanges.splice(0, ApplyProfileChanges.length, {
             changeType: "fullProfileUpdate",
             profile: profile,
@@ -1468,6 +1474,7 @@ app.post("/fortnite/api/game/v2/profile/*/client/SetPartyAssistQuest", verifyTok
 app.post("/fortnite/api/game/v2/profile/*/client/UpdateQuestClientObjectives", verifyToken, async (req, res) => {
     const profiles = await Profile.findOne({ accountId: req.user.accountId });
     let profile = profiles.profiles[req.query.profileId];
+    let athena = profiles.profiles["athena"]; // ensure we can modify athena stats
     const memory = functions.GetVersionInfo(req);
 
     // do not change any of these or you will end up breaking it
@@ -1476,6 +1483,13 @@ app.post("/fortnite/api/game/v2/profile/*/client/UpdateQuestClientObjectives", v
     var ProfileRevisionCheck = (memory.build >= 12.20) ? profile.commandRevision : profile.rvn;
     var QueryRevision = req.query.rvn || -1;
     var StatChanged = false;
+    // Load seasonal quests definition for current build/season (fallback to Season15 on 15.x)
+    const AthenaQuestIDS = require("./../responses/quests.json");
+    const SeasonPrefixUpdate = memory.season < 10 ? `0${memory.season}` : memory.season;
+    let SeasonQuestIDS_Update = AthenaQuestIDS[`Season${SeasonPrefixUpdate}`];
+    if (Math.floor(memory.build) === 15) {
+        SeasonQuestIDS_Update = AthenaQuestIDS["Season15"] || SeasonQuestIDS_Update;
+    }
 
     if (req.body.advance) {
         for (var i in req.body.advance) {
@@ -1521,6 +1535,74 @@ app.post("/fortnite/api/game/v2/profile/*/client/UpdateQuestClientObjectives", v
                             "attributeName": "quest_state",
                             "attributeValue": profile.items[QuestsToUpdate[i]].attributes.quest_state
                         })
+
+                        // Challenges: increment bundle progress and award Season XP for 15.30
+                        try {
+                            if (SeasonQuestIDS_Update && SeasonQuestIDS_Update.Quests) {
+                                const QuestID = QuestsToUpdate[i];
+                                const QuestDef = SeasonQuestIDS_Update.Quests[QuestID];
+                                if (QuestDef && QuestDef.challenge_bundle_id) {
+                                    const BundleId = QuestDef.challenge_bundle_id;
+                                    if (profile.items[BundleId] && profile.items[BundleId].attributes) {
+                                        // increment counters
+                                        const bundleAttrs = profile.items[BundleId].attributes;
+                                        bundleAttrs.num_quests_completed = (bundleAttrs.num_quests_completed || 0) + 1;
+                                        bundleAttrs.num_progress_quests_completed = (bundleAttrs.num_progress_quests_completed || 0) + 1;
+
+                                        ApplyProfileChanges.push({
+                                            "changeType": "itemAttrChanged",
+                                            "itemId": BundleId,
+                                            "attributeName": "num_quests_completed",
+                                            "attributeValue": bundleAttrs.num_quests_completed
+                                        });
+                                        ApplyProfileChanges.push({
+                                            "changeType": "itemAttrChanged",
+                                            "itemId": BundleId,
+                                            "attributeName": "num_progress_quests_completed",
+                                            "attributeValue": bundleAttrs.num_progress_quests_completed
+                                        });
+
+                                        // award completion rewards (Season XP)
+                                        const completion = String(bundleAttrs.num_quests_completed);
+                                        const bundleDef = SeasonQuestIDS_Update.ChallengeBundles[BundleId];
+                                        if (bundleDef && bundleDef.completionRewards && bundleDef.completionRewards[completion]) {
+                                            for (const reward of bundleDef.completionRewards[completion]) {
+                                                if (typeof reward.templateId === "string" && reward.templateId.toLowerCase() === "accountresource:athenaseasonalxp") {
+                                                    const qty = Number(reward.quantity) || 0;
+                                                    // Ensure past_seasons exists and update Season XP for current season
+                                                    if (!athena.stats.attributes.past_seasons) athena.stats.attributes.past_seasons = [];
+                                                    const seasonNum = (global?.kv?.get?.("currentSeason") || null) || (require("../Config/config.json").bBattlePassSeason || memory.season);
+                                                    let psIndex = athena.stats.attributes.past_seasons.findIndex(s => s.seasonNumber === seasonNum);
+                                                    if (psIndex === -1) {
+                                                        athena.stats.attributes.past_seasons.push({
+                                                            seasonNumber: seasonNum,
+                                                            numWins: 0,
+                                                            numHighBracket: 0,
+                                                            numLowBracket: 0,
+                                                            seasonXp: 0,
+                                                            seasonLevel: 1,
+                                                            bookXp: athena.stats.attributes.book_xp || 0,
+                                                            bookLevel: athena.stats.attributes.book_level || 1,
+                                                            purchasedVIP: athena.stats.attributes.book_purchased || false,
+                                                            numRoyalRoyales: 0,
+                                                            survivorTier: 0,
+                                                            survivorPrestige: 0
+                                                        });
+                                                        psIndex = athena.stats.attributes.past_seasons.length - 1;
+                                                    }
+                                                    athena.stats.attributes.past_seasons[psIndex].seasonXp += qty;
+                                                    ApplyProfileChanges.push({
+                                                        "changeType": "statModified",
+                                                        "name": "past_seasons",
+                                                        "value": athena.stats.attributes.past_seasons
+                                                    });
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        } catch {}
                     }
                 }
 
@@ -1532,11 +1614,16 @@ app.post("/fortnite/api/game/v2/profile/*/client/UpdateQuestClientObjectives", v
     if (StatChanged == true) {
         profile.rvn += 1;
         profile.commandRevision += 1;
+        // persist both quest profile and athena if we've modified Season XP
+        const updateSet = { [`profiles.${req.query.profileId}`]: profile };
+        if (athena && req.query.profileId !== "athena") {
+            updateSet["profiles.athena"] = athena;
+        }
         
-        await profiles.updateOne({ $set: { [`profiles.${req.query.profileId}`]: profile } });
+        await profiles.updateOne({ $set: updateSet });
     }
 	
-    if (QueryRevision != ProfileRevisionCheck) {
+    if (QueryRevision != ProfileRevisionCheck || Math.floor(memory.build) >= 15) {
         ApplyProfileChanges = [{
             "changeType": "fullProfileUpdate",
             "profile": profile
