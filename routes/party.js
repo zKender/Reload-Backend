@@ -698,7 +698,7 @@ var lastClient;
 app.post("/party/api/v1/Fortnite/parties/:pid/members/:accountId/conferences/connection", verifyToken, async (req, res) => {
   const { pid, accountId } = req.params;
 
-  let { vivox, rtcp } = req.body.providers;
+  let { vivox, rtcp } = req.body.providers || {};
   const party = parties[pid];
 
   if (rtcp) {
@@ -754,6 +754,7 @@ app.post("/party/api/v1/Fortnite/parties/:pid/members/:accountId/conferences/con
       room_name: vcInfo[pid].name
     };
   } else {
+    // Fallback Vivox for older/OG clients (e.g., 15.x)
     const channel_uri = `sip:confctl-g-epicgames.p-${pid}@mtu1xp.vivox.com`;
     const user_uri = `sip:.epicgames.${accountId}.@mtu1xp.vivox.com`;
 
@@ -769,9 +770,9 @@ app.post("/party/api/v1/Fortnite/parties/:pid/members/:accountId/conferences/con
     const token = vxGenerateToken("zcETsPpEAysznTyDXK4TEzwLQPcTvTAO", vivoxClaims);
 
     vivox = {
-      "authorization_token": token,
-      "channel_uri": channel_uri,
-      "user_uri": user_uri
+      authorization_token: token,
+      channel_uri: channel_uri,
+      user_uri: user_uri
     }
   }
 

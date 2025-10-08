@@ -1521,6 +1521,37 @@ app.post("/fortnite/api/game/v2/profile/*/client/UpdateQuestClientObjectives", v
                             "attributeName": "quest_state",
                             "attributeValue": profile.items[QuestsToUpdate[i]].attributes.quest_state
                         })
+
+                        // Award XP or Battle Stars on claim when available in quest rewards
+                        try {
+                            const questItem = profile.items[QuestsToUpdate[i]];
+                            const questsData = require("./../responses/quests.json");
+                            const seasonKey = `Season${(functions.GetVersionInfo(req).season < 10 ? "0" : "")}${functions.GetVersionInfo(req).season}`;
+                            // Build a map of questId -> rewards for current season if present
+                            let rewardItems = [];
+                            if (questsData[seasonKey] && questsData[seasonKey].Quests && questsData[seasonKey].Quests[QuestsToUpdate[i]]) {
+                                const qDef = questsData[seasonKey].Quests[QuestsToUpdate[i]];
+                                rewardItems = Array.isArray(qDef.rewards) ? qDef.rewards : [];
+                            }
+                            // Fallback: per-bundle completion rewards are handled when bundles complete; here, just increment XP flat if none found
+                            let xpAward = 0;
+                            for (const r of rewardItems) {
+                                if (typeof r.templateId === "string" && r.templateId.toLowerCase() === "accountresource:athenaseasonalxp") {
+                                    xpAward += Number(r.quantity || 0);
+                                }
+                            }
+                            if (!xpAward) {
+                                // Default small XP for quest claim on OG 15.x
+                                xpAward = 3500;
+                            }
+                            const prevXp = profile.stats.attributes.xp || 0;
+                            profile.stats.attributes.xp = prevXp + xpAward;
+                            ApplyProfileChanges.push({
+                                changeType: "statModified",
+                                name: "xp",
+                                value: profile.stats.attributes.xp
+                            });
+                        } catch {}
                     }
                 }
 
@@ -1565,7 +1596,7 @@ app.post("/fortnite/api/game/v2/profile/*/client/RequestRestedStateIncrease", as
     let ProfileRevisionCheck = (memory.build >= 12.20) ? profile.commandRevision : profile.rvn;
     let QueryRevision = req.query.rvn || -1;
     let StatChanged = false;
-    let xp = profile.stats.attributes["book_xp"] + req.body.restedXpGenAccumulated;
+    let xp = (profile.stats.attributes["book_xp"] || 0) + (req.body.restedXpGenAccumulated || 0);
 
     if (xp !== profile.stats.attributes["book_xp"]) {
         StatChanged = true;

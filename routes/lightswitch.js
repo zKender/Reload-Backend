@@ -12,7 +12,7 @@ app.get("/lightswitch/api/service/Fortnite/status", async (req, res) => {
         "overrideCatalogIds": [
             "a7f138b2e51945ffbfdacc1af0541053"
         ],
-        "allowedActions": [],
+        "allowedActions": ["PLAY","DOWNLOAD"],
         "banned": false,
         "launcherInfoDTO": {
             "appName": "Fortnite",

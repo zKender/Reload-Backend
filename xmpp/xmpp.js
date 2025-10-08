@@ -13,6 +13,7 @@ const User = require("../model/user.js");
 const Friends = require("../model/friends.js");
 const matchmaker = require("../matchmaker/matchmaker.js")
 
+// Use a dedicated port for XMPP/Matchmaker to avoid collision with the HTTP API
 const port = config.bEnableHTTPS ? 443 : 80;
 let wss;
 

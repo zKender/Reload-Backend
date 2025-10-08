@@ -3,6 +3,7 @@ const app = express.Router();
 
 const functions = require("../structs/functions.js");
 const log = require("../structs/log.js");
+const error = require("../structs/error.js");
 
 const Friends = require("../model/friends.js");
 const friendManager = require("../structs/friend.js");
@@ -71,7 +72,12 @@ app.get("/friends/api/public/friends/:accountId", verifyToken, async (req, res) 
     log.debug(`GET /friends/api/public/friends/${req.params.accountId} called`);
     let response = [];
 
-    const friends = await Friends.findOne({ accountId: req.user.accountId }).lean();
+    let friends = await Friends.findOne({ accountId: req.user.accountId }).lean();
+    if (!friends) {
+        // Ensure an empty friends document exists for the caller
+        await Friends.create({ created: new Date().toISOString(), accountId: req.user.accountId });
+        friends = { list: { accepted: [], incoming: [], outgoing: [], blocked: [] } };
+    }
 
     friends.list.accepted.forEach(acceptedFriend => {
         response.push({
@@ -110,6 +116,14 @@ app.post("/friends/api/*/friends*/:receiverId", verifyToken, async (req, res) =>
     log.debug(`POST /friends/api/*/friends*/${req.params.receiverId} called`);
     let sender = await Friends.findOne({ accountId: req.user.accountId });
     let receiver = await Friends.findOne({ accountId: req.params.receiverId });
+    if (!sender) {
+        await Friends.create({ created: new Date().toISOString(), accountId: req.user.accountId });
+        sender = await Friends.findOne({ accountId: req.user.accountId });
+    }
+    if (!receiver) {
+        await Friends.create({ created: new Date().toISOString(), accountId: req.params.receiverId });
+        receiver = await Friends.findOne({ accountId: req.params.receiverId });
+    }
     if (!sender || !receiver) return res.status(403).end();
 
     if (sender.list.incoming.find(i => i.accountId == receiver.accountId)) {
@@ -128,6 +142,14 @@ app.delete("/friends/api/*/friends*/:receiverId", verifyToken, async (req, res) 
     log.debug(`DELETE /friends/api/*/friends*/${req.params.receiverId} called`);
     let sender = await Friends.findOne({ accountId: req.user.accountId });
     let receiver = await Friends.findOne({ accountId: req.params.receiverId });
+    if (!sender) {
+        await Friends.create({ created: new Date().toISOString(), accountId: req.user.accountId });
+        sender = await Friends.findOne({ accountId: req.user.accountId });
+    }
+    if (!receiver) {
+        await Friends.create({ created: new Date().toISOString(), accountId: req.params.receiverId });
+        receiver = await Friends.findOne({ accountId: req.params.receiverId });
+    }
     if (!sender || !receiver) return res.status(403).end();
 
     if (!await friendManager.deleteFriend(sender.accountId, receiver.accountId)) return res.status(403).end();
@@ -142,6 +164,14 @@ app.post("/friends/api/*/blocklist*/:receiverId", verifyToken, async (req, res) 
     log.debug(`POST /friends/api/*/blocklist*/${req.params.receiverId} called`);
     let sender = await Friends.findOne({ accountId: req.user.accountId });
     let receiver = await Friends.findOne({ accountId: req.params.receiverId });
+    if (!sender) {
+        await Friends.create({ created: new Date().toISOString(), accountId: req.user.accountId });
+        sender = await Friends.findOne({ accountId: req.user.accountId });
+    }
+    if (!receiver) {
+        await Friends.create({ created: new Date().toISOString(), accountId: req.params.receiverId });
+        receiver = await Friends.findOne({ accountId: req.params.receiverId });
+    }
     if (!sender || !receiver) return res.status(403).end();
 
     if (!await friendManager.blockFriend(sender.accountId, receiver.accountId)) return res.status(403).end();
@@ -156,6 +186,14 @@ app.delete("/friends/api/*/blocklist*/:receiverId", verifyToken, async (req, res
     log.debug(`DELETE /friends/api/*/blocklist*/${req.params.receiverId} called`);
     let sender = await Friends.findOne({ accountId: req.user.accountId });
     let receiver = await Friends.findOne({ accountId: req.params.receiverId });
+    if (!sender) {
+        await Friends.create({ created: new Date().toISOString(), accountId: req.user.accountId });
+        sender = await Friends.findOne({ accountId: req.user.accountId });
+    }
+    if (!receiver) {
+        await Friends.create({ created: new Date().toISOString(), accountId: req.params.receiverId });
+        receiver = await Friends.findOne({ accountId: req.params.receiverId });
+    }
     if (!sender || !receiver) return res.status(403).end();
 
     if (!await friendManager.deleteFriend(sender.accountId, receiver.accountId)) return res.status(403).end();
@@ -176,7 +214,11 @@ app.get("/friends/api/v1/:accountId/summary", verifyToken, async (req, res) => {
         }
     }
 
-    const friends = await Friends.findOne({ accountId: req.user.accountId }).lean();
+    let friends = await Friends.findOne({ accountId: req.user.accountId }).lean();
+    if (!friends) {
+        await Friends.create({ created: new Date().toISOString(), accountId: req.user.accountId });
+        friends = { list: { accepted: [], incoming: [], outgoing: [], blocked: [] } };
+    }
 
     friends.list.accepted.forEach(acceptedFriend => {
         response.friends.push({
@@ -218,6 +260,11 @@ app.get("/friends/api/v1/:accountId/summary", verifyToken, async (req, res) => {
 app.get("/friends/api/public/blocklist/*", verifyToken, async (req, res) => {
     log.debug("GET /friends/api/public/blocklist/* called");
     let friends = await Friends.findOne({ accountId: req.user.accountId }).lean();
+    if (!friends) {
+        return res.json({
+            "blockedUsers": []
+        });
+    }
 
     res.json({
         "blockedUsers": friends.list.blocked.map(i => i.accountId)
